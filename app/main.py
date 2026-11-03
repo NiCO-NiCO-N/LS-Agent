@@ -593,3 +593,40 @@ async def ticket_stop(ticket_id: str) -> Dict[str, Any]:
     except KeyError:
         raise HTTPException(404, "工单不存在")
     return {**ticket, "stage": task_store.stage(ticket)}
+
+
+# --------------------------------------------------------------------------- #
+# 上传：拖进对话区 / 右键上传都走这里，存到 workspace/uploads/
+# --------------------------------------------------------------------------- #
+UPLOAD_DIR = Path("workspace") / "uploads"
+
+
+class UploadIn(BaseModel):
+    name: str = "file"
+    data: str = ""          # base64
+
+
+@app.post("/api/uploads")
+async def upload_files(payload: UploadIn) -> Dict[str, Any]:
+    import base64
+    import binascii
+
+    raw_name = Path(str(payload.name or "file")).name
+    safe = re.sub(r"[^\w.\-\u4e00-\u9fff]+", "_", raw_name)[:80] or "file"
+    try:
+        blob = base64.b64decode(payload.data or "", validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(400, "文件内容不是合法 base64")
+    if not blob:
+        raise HTTPException(400, "空文件")
+    if len(blob) > 20 * 1024 * 1024:
+        raise HTTPException(413, "单个文件不能超过 20 MB")
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = UPLOAD_DIR / f"{stamp}-{safe}"
+    i = 1
+    while target.exists():
+        target = UPLOAD_DIR / f"{stamp}-{i}-{safe}"
+        i += 1
+    target.write_bytes(blob)
+    return {"ok": True, "path": target.as_posix(), "name": safe, "size": len(blob)}

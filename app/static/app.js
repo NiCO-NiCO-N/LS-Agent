@@ -667,8 +667,14 @@ function handleEvent(event) {
 async function sendMessage() {
   if (state.streaming) return;
   const input = $('#input');
-  const text = input.value.trim();
-  if (!text) return;
+  let text = input.value.trim();
+  if (!text && !ATTACH.length) return;
+  if (ATTACH.length) {
+    const refs = ATTACH.map((a) => '- ' + a.path).join('\n');
+    text = (text ? text + '\n\n' : '') + '附件（已存入工作区，可用 read_file 读取）：\n' + refs;
+    ATTACH = [];
+    renderAtts();
+  }
 
   if (!state.config) { toast('配置还没加载完成', 'error'); return; }
 
@@ -1449,3 +1455,118 @@ function renderRail() {
 
 loadTickets();
 setInterval(loadTickets, 15000);
+
+
+/* ---------------- 附件：拖进来 / 右键上传 ---------------- */
+let ATTACH = [];
+
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function readAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+}
+
+async function uploadFiles(list) {
+  const files = [...list];
+  if (!files.length) return;
+  if (state.streaming) { toast('等这一轮回答结束再上传', 'error'); return; }
+  ensureDraft(); focusDraft();
+  for (const f of files) {
+    try {
+      const data = await readAsBase64(f);
+      const res = await fetch('/api/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: f.name, data }),
+      });
+      const out = await res.json();
+      if (!res.ok || !out.ok) throw new Error(out.detail || out.message || ('HTTP ' + res.status));
+      ATTACH.push({ name: out.name || f.name, path: out.path, size: out.size || f.size });
+    } catch (e) {
+      toast('上传失败：' + f.name + ' · ' + e.message, 'error');
+    }
+  }
+  renderAtts();
+  focusDraft();
+}
+
+function renderAtts() {
+  const bubble = document.querySelector('.msg.draft .bubble');
+  if (!bubble) return;
+  let box = bubble.querySelector('.atts');
+  if (!ATTACH.length) { if (box) box.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'atts';
+    bubble.insertBefore(box, bubble.firstChild);
+  }
+  box.innerHTML = ATTACH.map((a, i) => '<span class="att" data-i="' + i + '">' +
+    '<span class="att-ico">▤</span>' + escHtml(a.name) +
+    '<span class="att-size">' + fmtSize(a.size) + '</span>' +
+    '<span class="att-x" title="移除">x</span></span>').join('');
+  box.querySelectorAll('.att-x').forEach((x) => {
+    x.onclick = (e) => {
+      e.stopPropagation();
+      ATTACH.splice(Number(x.parentElement.dataset.i), 1);
+      renderAtts();
+      focusDraft();
+    };
+  });
+}
+
+/* 拖拽：整块对话区都能接；右键：输入区弹出上传菜单 */
+(function enableDrop() {
+  const overlay = document.createElement('div');
+  overlay.className = 'dropzone';
+  overlay.hidden = true;
+  overlay.innerHTML = '<div class="dropzone-inner">松手即上传 · 支持多文件</div>';
+  document.body.appendChild(overlay);
+  let depth = 0;
+  const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+  const show = () => { if (!state.streaming) overlay.hidden = false; };
+  const hide = () => { overlay.hidden = true; depth = 0; };
+  document.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; depth += 1; show(); });
+  document.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); show(); });
+  document.addEventListener('dragleave', () => { depth -= 1; if (depth <= 0) hide(); });
+  document.addEventListener('drop', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    hide();
+    uploadFiles(e.dataTransfer.files);
+  });
+
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.multiple = true;
+  picker.hidden = true;
+  picker.onchange = () => { if (picker.files && picker.files.length) uploadFiles(picker.files); picker.value = ''; };
+  document.body.appendChild(picker);
+
+  const menu = document.createElement('div');
+  menu.className = 'ctxmenu';
+  menu.hidden = true;
+  menu.innerHTML = '<div class="ctx-item" data-act="upload"><span>▤</span>上传文档</div>' +
+    '<div class="ctx-hint">也可直接把文件拖进对话区</div>';
+  document.body.appendChild(menu);
+  menu.querySelector('[data-act="upload"]').onclick = () => { menu.hidden = true; picker.click(); };
+  document.addEventListener('click', () => { menu.hidden = true; });
+  document.addEventListener('scroll', () => { menu.hidden = true; }, true);
+
+  document.addEventListener('contextmenu', (e) => {
+    if (!e.target.closest('#messages')) return;
+    e.preventDefault();
+    ensureDraft();
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 190) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    menu.hidden = false;
+  });
+})();
