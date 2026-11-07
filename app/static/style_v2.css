@@ -1,0 +1,606 @@
+/* ===================================================================
+   v2 · 视觉统一层（追加在末尾，覆盖前面的零散样式）
+   设计纪律：
+   1) 暗底是主体，霓虹是信息 —— 每屏亮色不超过三处，只给状态与交互
+   2) 直角与细线优先，圆角只出现在需要「软」的地方（气泡本体 3px）
+   3) 字分两族：正文用无衬线（汉字才不糊），标签/数值/代号用等宽
+   4) 间距走 4 的倍数；所有面板共用一套边框与内阴影
+   5) 动效只表达状态变化，120–220ms，ease-out
+   =================================================================== */
+
+:root {
+  /* 尺度 */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --r-sharp: 2px;
+  --r-soft: 3px;
+  /* 字族 */
+  --ui: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  /* 表面分三级：底、面板、抬升 */
+  --surf-0: #04070c;
+  --surf-1: rgba(9, 19, 28, .62);
+  --surf-2: rgba(13, 27, 38, .74);
+  /* 边缘光：上亮下暗，模拟单侧光源 */
+  --edge: inset 0 1px 0 rgba(190, 240, 255, .07), inset 0 -1px 0 rgba(0, 0, 0, .5);
+  --hair: 1px solid rgba(34, 230, 255, .14);
+  --hair-hot: 1px solid rgba(255, 46, 151, .22);
+  --focus: 0 0 0 1px rgba(4, 7, 12, .9), 0 0 0 2px rgba(34, 230, 255, .55);
+}
+
+/* ---------- 排版基线 ---------- */
+body, button, input, textarea, select {
+  font-family: var(--ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body { letter-spacing: .012em; }
+::selection { background: rgba(34, 230, 255, .26); color: #eaffff; }
+
+/* 元信息统一：小字号 + 宽字距 + 等宽 */
+.title-wrap .meta, .session-item .st, .pc-actions .tag, .s-meta, .tcard-meta,
+.tool-label, .log-time, .log-rid, .ml-tip, .ctx-hint, .att-size, .hint {
+  font-family: var(--mono);
+  letter-spacing: .1em;
+}
+h1, h2, h3, .empty h2, .panel-title h3 {
+  font-family: var(--ui);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+/* ---------- 骨骼：让三块区域对齐同一条网格 ---------- */
+.app { grid-template-columns: 252px 1fr; }
+.sidebar {
+  background: linear-gradient(180deg, rgba(7, 16, 24, .9), rgba(4, 9, 14, .94));
+  border-right: 1px solid rgba(34, 230, 255, .1);
+}
+.topbar {
+  background: rgba(4, 9, 14, .72);
+  border-bottom: 1px solid rgba(34, 230, 255, .1);
+  backdrop-filter: blur(14px) saturate(120%);
+}
+.main::after {
+  content: "";
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(34, 230, 255, .028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 230, 255, .028) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(120% 80% at 50% 0%, #000 20%, transparent 78%);
+}
+.crt { opacity: .34; }
+
+/* ---------- 品牌 ---------- */
+.brand-text strong {
+  font-size: 12.5px; letter-spacing: .22em; font-weight: 600; color: #e8fbff;
+}
+.brand-text span {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .2em;
+  color: rgba(124, 157, 178, .8);
+}
+.logo {
+  filter: drop-shadow(0 0 6px rgba(34, 230, 255, .45));
+  transition: filter .2s ease;
+}
+
+/* ---------- 会话列表：把「选中」做成一条导轨而不是一块色块 ---------- */
+.session-item {
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 9px 12px 9px 14px;
+  transition: background .15s ease, border-color .15s ease;
+}
+.session-item::before {
+  width: 2px; border-radius: 0;
+  background: transparent; box-shadow: none;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.session-item:hover { background: rgba(34, 230, 255, .045); }
+.session-item:hover::before { background: rgba(34, 230, 255, .35); }
+.session-item.active {
+  background: linear-gradient(90deg, rgba(34, 230, 255, .1), rgba(34, 230, 255, .02) 70%);
+  border-color: rgba(34, 230, 255, .16);
+}
+.session-item.active::before {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(34, 230, 255, .7);
+}
+.session-item .st { font-size: 9px; color: rgba(124, 157, 178, .75); }
+.session-item.active .st { color: rgba(34, 230, 255, .85); }
+
+/* ---------- 交互件：统一高度、直角、等宽标签 ---------- */
+.btn, .icon-btn, .chip, .tab, .ml-item {
+  border-radius: var(--r-sharp);
+  transition: background .14s ease, border-color .14s ease, color .14s ease, transform .14s ease;
+}
+.btn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+  padding: 8px 14px; border: 1px solid rgba(34, 230, 255, .26);
+  background: linear-gradient(180deg, rgba(18, 38, 52, .6), rgba(8, 18, 26, .6));
+  color: #cdeeff;
+}
+.btn:hover {
+  border-color: rgba(34, 230, 255, .55);
+  background: linear-gradient(180deg, rgba(30, 60, 80, .7), rgba(10, 24, 34, .7));
+  box-shadow: 0 0 14px rgba(34, 230, 255, .14);
+}
+.btn:active { transform: translateY(1px); }
+.btn.primary {
+  border-color: rgba(34, 230, 255, .5);
+  background: linear-gradient(180deg, rgba(34, 230, 255, .2), rgba(34, 230, 255, .08));
+  color: #eafdff;
+}
+.btn.primary:hover { box-shadow: 0 0 18px rgba(34, 230, 255, .3); }
+.btn.danger { border-color: rgba(255, 93, 115, .4); color: #ffd5db; background: rgba(255, 93, 115, .1); }
+.btn:disabled { opacity: .38; box-shadow: none; }
+.icon-btn {
+  width: 30px; height: 30px; display: inline-grid; place-items: center;
+  border: 1px solid rgba(34, 230, 255, .2); color: #b6e4f2;
+  background: rgba(10, 22, 32, .5);
+}
+.icon-btn:hover { border-color: rgba(34, 230, 255, .5); color: #eafdff; background: rgba(34, 230, 255, .1); }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+
+.select {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
+  border-radius: var(--r-sharp); border: 1px solid rgba(34, 230, 255, .22);
+  background: rgba(10, 22, 32, .62); color: #cdeeff; padding: 6px 9px;
+}
+.select:hover { border-color: rgba(34, 230, 255, .45); }
+.select option { background: #071019; color: #cdeeff; }
+
+/* ---------- 状态灯 ---------- */
+.hud { border: 1px solid rgba(34, 230, 255, .18); border-radius: var(--r-sharp); padding: 5px 9px; }
+.hud-dot { width: 5px; height: 5px; }
+.sig i { width: 2px; border-radius: 0; }
+
+/* ---------- 消息区：靠「左导轨 + 语气」区分，而不是两套彩色玻璃 ---------- */
+.messages { padding: var(--s5) var(--s5) 140px; gap: 0; }
+.msg { max-width: 860px; gap: 10px; padding-top: 18px; }
+
+.bubble {
+  position: relative;
+  border-radius: var(--r-soft);
+  border: 1px solid rgba(34, 230, 255, .16);
+  border-left: 2px solid rgba(34, 230, 255, .5);
+  background: linear-gradient(180deg, rgba(11, 24, 34, .66), rgba(7, 16, 24, .58));
+  box-shadow: var(--edge);
+  padding: 12px 16px;
+  backdrop-filter: blur(12px) saturate(120%);
+}
+.bubble::before {
+  font-size: 8.5px; letter-spacing: .26em; color: rgba(34, 230, 255, .42);
+  background: transparent; top: -10px; left: 6px; padding: 0;
+}
+.bubble::after { display: none; }
+
+.msg.user .bubble {
+  border-color: rgba(255, 46, 151, .16);
+  border-left: 2px solid rgba(255, 46, 151, .52);
+  background: linear-gradient(180deg, rgba(30, 12, 24, .58), rgba(16, 7, 14, .52));
+}
+.msg.user .bubble::before { color: rgba(255, 46, 151, .45); }
+
+/* 正文可读性 */
+.bubble .content { font-size: 13.5px; line-height: 1.75; color: #dcf4fb; }
+.bubble p { margin: 0 0 10px; }
+.bubble li { margin: 3px 0; }
+.bubble code {
+  font-family: var(--mono); font-size: 12px;
+  background: rgba(34, 230, 255, .08); border: 1px solid rgba(34, 230, 255, .16);
+  border-radius: var(--r-sharp); padding: 1px 5px; color: #a9ecff;
+}
+.bubble pre.code {
+  border-radius: var(--r-sharp); border: 1px solid rgba(34, 230, 255, .16);
+  background: rgba(3, 9, 14, .82); box-shadow: var(--edge);
+}
+.bubble table { border-radius: var(--r-sharp); overflow: hidden; }
+.bubble th {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  background: rgba(34, 230, 255, .07); color: #a9e6f6;
+}
+.bubble a { text-decoration-color: rgba(34, 230, 255, .4); text-underline-offset: 3px; }
+
+/* 草稿气泡 */
+.msg.draft .bubble { border-style: dashed; border-left-style: solid; }
+.msg.draft .content { font-size: 13.5px; line-height: 1.7; }
+
+/* ---------- 工具卡片：更像一条日志行 ---------- */
+.tool-card {
+  border-radius: var(--r-sharp);
+  border: 1px solid rgba(34, 230, 255, .14);
+  border-left: 2px solid rgba(255, 185, 69, .55);
+  background: rgba(8, 18, 26, .62);
+  box-shadow: var(--edge);
+}
+.tool-card.done { border-left-color: rgba(34, 230, 255, .55); }
+.tool-card.err { border-left-color: rgba(255, 93, 115, .7); }
+.tool-card summary { padding: 7px 10px; }
+.tool-card .tool-name { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; }
+.tool-card .tool-state {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  border: 1px solid rgba(34, 230, 255, .2); border-radius: 0; padding: 1px 5px;
+}
+.tool-act { font-size: 10.5px; color: rgba(198, 230, 240, .68); }
+.tools { gap: 6px; margin: 8px 0 2px; }
+
+/* ---------- 推理折叠 ---------- */
+.reasoning, .reason {
+  border-left: 1px solid rgba(34, 230, 255, .16);
+  padding-left: 10px; margin: 6px 0;
+  color: rgba(150, 190, 205, .85); font-size: 11.5px;
+}
+.reasoning summary, .reason summary {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em;
+  color: rgba(34, 230, 255, .55);
+}
+
+/* ---------- 工单窄栏 ---------- */
+.rail { top: 72px; right: var(--s4); width: 236px; gap: 6px; }
+.rail-head {
+  border-radius: 0; font-size: 9px; letter-spacing: .22em;
+  border: var(--hair-hot); border-left: 2px solid var(--hot);
+  background: rgba(24, 8, 18, .7); padding: 7px 9px;
+}
+.tcard {
+  border-radius: 0; padding: 9px 10px;
+  border: var(--hair-hot); border-left: 2px solid rgba(255, 46, 151, .7);
+  background: linear-gradient(180deg, rgba(24, 10, 20, .72), rgba(10, 6, 12, .66));
+  box-shadow: var(--edge);
+}
+.tcard:hover { transform: translateX(-3px); box-shadow: var(--edge), 0 0 16px rgba(255, 46, 151, .16); }
+.tcard-top { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: #ffcfe4; }
+.tcard-stage { border-radius: 0; font-size: 8.5px; letter-spacing: .14em; padding: 2px 5px; }
+.tcard-req { font-size: 11.5px; line-height: 1.5; color: rgba(226, 244, 250, .88); }
+
+/* ---------- 附件、右键菜单、拖拽层 ---------- */
+.att {
+  border-radius: 0; padding: 3px 7px; font-size: 10px;
+  border: 1px solid rgba(34, 230, 255, .26);
+  border-left: 2px solid rgba(34, 230, 255, .6);
+  background: rgba(34, 230, 255, .07);
+  clip-path: none;
+}
+.att-x { color: rgba(255, 46, 151, .9); }
+.ctxmenu { border-radius: 0; border: 1px solid rgba(34, 230, 255, .3); box-shadow: 0 14px 40px rgba(0, 0, 0, .6), var(--edge); }
+.ctx-item { border-radius: 0; font-size: 11.5px; }
+.ctx-item:hover { border-left-color: var(--accent); background: rgba(34, 230, 255, .1); }
+.dropzone { border-width: 1px; border-style: dashed; background: rgba(3, 8, 12, .86); }
+.dropzone-inner { border-radius: 0; letter-spacing: .28em; }
+
+/* ---------- 弹窗与表单 ---------- */
+.modal { background: rgba(3, 7, 11, .74); backdrop-filter: blur(6px); }
+.modal-card {
+  border-radius: 0; border: 1px solid rgba(34, 230, 255, .2);
+  background: linear-gradient(180deg, rgba(9, 20, 29, .97), rgba(5, 12, 18, .98));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .7), var(--edge);
+}
+.modal-card::before, .modal-card::after { display: none; }
+.modal-head {
+  border-bottom: 1px solid rgba(34, 230, 255, .12);
+  background: rgba(34, 230, 255, .03);
+}
+.modal-head h3, .modal-head strong { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; }
+.tabs { border-bottom: 1px solid rgba(34, 230, 255, .1); }
+.tab {
+  border-radius: 0; font-family: var(--mono); font-size: 10px; letter-spacing: .16em;
+  border: 1px solid transparent; border-bottom: 2px solid transparent; color: rgba(124, 157, 178, .9);
+}
+.tab:hover { color: #d7f5ff; background: rgba(34, 230, 255, .05); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+.field span, .field label { font-family: var(--mono); font-size: 9px; letter-spacing: .16em; color: rgba(124, 157, 178, .95); }
+.field input, .field select, .field textarea, .editor textarea, .pc-head input[type="text"] {
+  border-radius: var(--r-sharp); border: 1px solid rgba(34, 230, 255, .18);
+  background: rgba(3, 10, 15, .72); color: #d7f5ff; font-size: 12px; padding: 8px 10px;
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+.field input:focus, .field select:focus, .field textarea:focus, .editor textarea:focus {
+  border-color: rgba(34, 230, 255, .5); box-shadow: 0 0 0 1px rgba(34, 230, 255, .18);
+}
+.provider-card, .skill-row, .model-list, .log-list, .editor {
+  border-radius: var(--r-sharp); background: rgba(6, 16, 24, .6);
+  border: 1px solid rgba(34, 230, 255, .12); box-shadow: var(--edge);
+}
+.provider-card.active { border-color: rgba(34, 230, 255, .4); background: rgba(34, 230, 255, .05); }
+.switch span { border-radius: 0; }
+.tag, .pill { border-radius: 0; font-family: var(--mono); font-size: 9px; letter-spacing: .12em; }
+
+/* ---------- 日志表 ---------- */
+.log-row { border-bottom: 1px solid rgba(34, 230, 255, .06); }
+.log-row:hover { background: rgba(34, 230, 255, .04); }
+.log-level { font-size: 9px; letter-spacing: .14em; border-radius: 0; }
+.log-msg { font-family: var(--ui); font-size: 11.5px; }
+
+/* ---------- 滚动条 ---------- */
+* { scrollbar-width: thin; scrollbar-color: rgba(34, 230, 255, .26) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 230, 255, .2); border-radius: 0;
+  border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(34, 230, 255, .4); background-clip: content-box; }
+
+/* ---------- 动效收敛 ---------- */
+.msg { animation: msg-in .18s ease-out both; }
+.toast { border-radius: 0; font-family: var(--mono); font-size: 11px; letter-spacing: .04em; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+/* ===================================================================
+   v2.1 修版：截图复盘后修的四件事
+   ① 消息列没落在视觉重心（右侧大片空白，行宽 90+ 字符）
+   ② 气泡顶部标签离气泡太远，纵向节奏松散
+   ③ 用户消息撑满整行，和助手列的左右边界不一致
+   ④ 侧栏底部按钮与工作区路径挤成两行
+   =================================================================== */
+
+/* ① 内容列固定宽度并居中；行宽压到 66ch 以内，长段落不再横跨全屏 */
+.messages {
+  padding: 26px var(--s6) 150px;
+  display: flex;
+  flex-direction: column;
+}
+.msg {
+  width: min(100%, 820px);
+  max-width: 820px;
+  margin-inline: auto;
+  padding-top: 16px;
+}
+.msg .bubble { max-width: min(100%, 66ch); }
+.msg .content, .msg .bubble .content { max-width: 100%; }
+
+/* ② 标签贴住气泡上沿，去掉漂浮感 */
+.bubble::before { top: -9px; letter-spacing: .22em; }
+
+/* ③ 用户消息：靠右但不撑满，与助手列共用同一条右边界 */
+.msg.user, .msg.draft { flex-direction: row-reverse; justify-content: flex-start; }
+.msg.user .bubble, .msg.draft .bubble { max-width: min(100%, 58ch); }
+.msg.user .bubble::before { right: 6px; }
+
+/* 助手气泡吃掉剩余宽度，但不超过 66ch，避免右侧空一大片 */
+.msg.assistant .bubble { flex: 1 1 auto; }
+
+/* 头像与气泡首行对齐 */
+.msg .avatar { margin-top: 3px; }
+
+/* 草稿气泡：无论 flex 方向如何都贴右，且与用户列共用右边界 */
+.msg.draft { align-self: flex-end; margin-left: auto; margin-right: 0; }
+
+/* ④ 侧栏底部：按钮等宽、路径单行省略 */
+.sidebar-foot { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; }
+.sidebar-foot .btn { width: 100%; justify-content: space-between; }
+.ws {
+  display: block;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .02em;
+  color: rgba(124, 157, 178, .62);
+  padding-top: 4px;
+}
+
+/* 空状态也走同一条中轴 */
+.empty { max-width: 620px; margin-inline: auto; }
+
+/* 草稿气泡与助手列左对齐，不再吊在右下角 */
+.msg.draft { justify-content: flex-end; }
+
+/* 顶部标题区收紧一档，让 meta 更像一行读数 */
+.title-wrap h1 { font-size: 13px; letter-spacing: .04em; }
+.title-wrap .meta { font-size: 9px; letter-spacing: .18em; color: rgba(124, 157, 178, .78); }
+
+/* ===================================================================
+   ⑧ 空状态：新对话欢迎区
+   —— 不是居中的一排按钮，而是一块「已就绪的控制台」：
+      左对齐、细边框、顶部两角 L 形括线，第一屏就给读数（模型/工具/技能）。
+   =================================================================== */
+.empty {
+  width: 100%; max-width: 620px;
+  margin: auto;
+  padding: var(--s5) var(--s5) var(--s4);
+  text-align: left;
+  position: relative;
+  border: 1px solid rgba(34, 230, 255, .13);
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(10, 22, 31, .6), rgba(5, 12, 18, .46));
+  box-shadow: var(--edge), 0 28px 64px rgba(0, 0, 0, .46);
+  backdrop-filter: blur(10px) saturate(115%);
+}
+/* 两角括线：只画两个角，比整圈圆角更像仪器 */
+.empty::before, .empty::after {
+  content: ""; position: absolute; width: 15px; height: 15px; pointer-events: none;
+}
+.empty::before {
+  top: -1px; left: -1px;
+  border-top: 1px solid rgba(34, 230, 255, .62);
+  border-left: 1px solid rgba(34, 230, 255, .62);
+}
+.empty::after {
+  bottom: -1px; right: -1px;
+  border-bottom: 1px solid rgba(34, 230, 255, .3);
+  border-right: 1px solid rgba(34, 230, 255, .3);
+}
+
+.empty-head { display: flex; align-items: center; gap: var(--s3); }
+.empty-logo {
+  flex: 0 0 auto; width: 34px; height: 34px;
+  display: grid; place-items: center;
+  margin: 0; border-radius: var(--r-sharp); clip-path: none;
+  background: rgba(34, 230, 255, .07);
+  border: 1px solid rgba(34, 230, 255, .34);
+  box-shadow: none;
+  color: #9ff3ff;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .08em; text-transform: lowercase;
+  text-shadow: 0 0 10px rgba(34, 230, 255, .55);
+}
+.empty-titles { min-width: 0; }
+.empty-eyebrow {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .24em;
+  color: rgba(124, 157, 178, .82);
+}
+.empty-eyebrow i {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(34, 230, 255, .9);
+  animation: hud-pulse 2.4s ease-in-out infinite;
+}
+.empty h2 {
+  margin: 4px 0 0;
+  font-family: var(--ui); font-size: 21px; font-weight: 600;
+  line-height: 1.25; letter-spacing: -.005em;
+  text-transform: none; text-shadow: 0 0 26px rgba(34, 230, 255, .16);
+  color: #e6f7ff;
+}
+.empty p {
+  margin: var(--s4) 0 0; max-width: 44ch;
+  color: rgba(150, 180, 196, .88);
+  font-size: 12.5px; line-height: 1.75;
+}
+.empty p::before { content: none; }
+
+/* 三格读数：模型 / 工具 / 技能 —— 值一律等宽，方便一眼比对 */
+.empty-meta {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: var(--s4) 0 0; padding: 0;
+  border-top: 1px solid rgba(34, 230, 255, .1);
+  border-bottom: 1px solid rgba(34, 230, 255, .1);
+}
+.empty-meta > div { padding: 9px 0 10px; min-width: 0; }
+.empty-meta > div + div { padding-left: var(--s3); border-left: 1px solid rgba(34, 230, 255, .07); }
+.empty-meta dt {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .22em;
+  color: rgba(93, 130, 152, .95);
+}
+.empty-meta dd {
+  margin: 3px 0 0;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .02em;
+  color: #bfe6f2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 建议命令：一行一条，左侧细导轨表示可执行，hover 才亮 */
+.chips {
+  display: flex; flex-direction: column; gap: 1px;
+  justify-content: flex-start; margin-top: var(--s3);
+}
+.chip {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; padding: 8px 10px;
+  border: 0; border-left: 2px solid transparent; border-radius: 0;
+  background: transparent;
+  color: #c6e4f0;
+  font-family: var(--ui); font-size: 12.5px; letter-spacing: 0;
+  text-align: left; cursor: pointer;
+  backdrop-filter: none; box-shadow: none;
+  transition: background .16s, border-color .16s, padding .16s;
+}
+.chip::before { content: none; }
+.chip:hover, .chip:focus-visible {
+  background: rgba(34, 230, 255, .055);
+  border-left-color: var(--accent);
+  padding-left: 14px;
+  outline: none; transform: none;
+}
+.chip-i {
+  flex: 0 0 auto;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+  color: rgba(34, 230, 255, .58);
+}
+.chip-t { flex: 1 1 auto; min-width: 0; color: #dceff8; }
+.chip-d {
+  flex: 0 0 auto;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em;
+  color: rgba(124, 157, 178, .66); text-transform: uppercase;
+}
+.chip-go {
+  flex: 0 0 auto;
+  font-family: var(--mono); font-size: 11px; line-height: 1;
+  color: rgba(34, 230, 255, .42);
+  transition: transform .16s, color .16s;
+}
+.chip:hover .chip-go { transform: translateX(3px); color: var(--accent); }
+
+/* ===================================================================
+   ⑨ 工具卡片：展开后是带行号的输出面板
+   —— 数字列做导轨并粘住左侧，长行换行后仍对齐在文字列，
+      hover 单行高亮；错误态整体偏红，不额外加图标。
+   =================================================================== */
+.tool-card { border-radius: var(--r-sharp); }
+.tool-card summary { padding: 7px 12px; gap: 9px; }
+.tool-card .tool-name::after {
+  content: ""; display: inline-block;
+  width: 0; height: 0; margin-left: 7px; vertical-align: middle;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 4.5px solid rgba(34, 230, 255, .45);
+  transition: transform .16s;
+}
+.tool-card[open] .tool-name::after { transform: rotate(90deg); }
+.tool-card .tool-state {
+  font-size: 9px; letter-spacing: .14em; color: rgba(124, 157, 178, .8);
+}
+.tool-card .tool-act {
+  max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mono); font-size: 9px; color: rgba(124, 157, 178, .72);
+}
+
+.tool-body { padding: var(--s2) 0 0; border-top: 1px solid rgba(34, 230, 255, .1); }
+.tool-label {
+  margin: var(--s2) 0 4px; padding: 0 var(--s3);
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .2em;
+  color: rgba(93, 130, 152, .95);
+}
+.tool-body pre.args {
+  margin: 0; padding: 7px var(--s3);
+  border: 0; border-radius: 0;
+  background: rgba(2, 8, 13, .5);
+  max-height: 120px; overflow: auto;
+  font-family: var(--mono); font-size: 11px; line-height: 1.62;
+  color: rgba(160, 196, 212, .92);
+  white-space: pre-wrap; word-break: break-word;
+}
+.tool-body .out {
+  display: block;
+  margin: 0; padding: 6px 0 7px;
+  border: 0; border-top: 1px solid rgba(34, 230, 255, .06);
+  border-bottom: 1px solid rgba(34, 230, 255, .06);
+  border-radius: 0;
+  background: rgba(2, 8, 13, .62);
+  max-height: 240px; overflow: auto; overscroll-behavior: contain;
+  font-family: var(--mono); font-size: 11px; line-height: 1.62; color: #b6d6e5;
+  white-space: normal;
+}
+.tool-body .out .ln {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+}
+.tool-body .out .ln:hover { background: rgba(34, 230, 255, .045); }
+.tool-body .out .no {
+  padding: 0 9px 0 6px;
+  text-align: right;
+  font-size: 9.5px; line-height: 1.86;
+  color: rgba(93, 130, 152, .48);
+  border-right: 1px solid rgba(34, 230, 255, .08);
+  background: rgba(2, 8, 13, .92);
+  user-select: none;
+}
+.tool-body .out .tx {
+  padding: 0 12px 0 10px;
+  line-height: 1.86;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.tool-body .out .ln-empty {
+  padding: 2px var(--s3);
+  color: rgba(124, 157, 178, .68);
+}
+.tool-card.err .out { background: rgba(22, 6, 10, .55); }
+.tool-card.err .out .tx { color: #ffc2ca; }
+.tool-body .out::-webkit-scrollbar { width: 8px; height: 8px; }
+.tool-body .out::-webkit-scrollbar-track { background: transparent; }
+.tool-body .out::-webkit-scrollbar-thumb { background: rgba(34, 230, 255, .16); border-radius: 0; }
+.tool-body .out::-webkit-scrollbar-thumb:hover { background: rgba(34, 230, 255, .3); }
+
+/* 带工具卡的气泡放宽到整列：文字仍收在 66ch，输出面板才不挤 */
+.msg.assistant .bubble:has(.tool-card) { max-width: min(100%, 100%); }
+.msg.assistant .bubble > .content { max-width: 66ch; }

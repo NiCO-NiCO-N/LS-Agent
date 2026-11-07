@@ -237,6 +237,32 @@ function renderCounts() {
   const enabled = (state.skills || []).filter((s) => s.enabled).length;
   $('#skillCount').textContent = String(enabled);
   if (state.config) $('#providerCount').textContent = String(state.config.providers.length);
+  paintEmpty();
+}
+
+/* 空状态里的三格读数：当前模型 / 工具数 / 启用技能数 */
+function paintEmpty() {
+  const cfg = state.config || {};
+  const provs = cfg.providers || [];
+  const prov = provs.find((p) => p.id === state.providerId) || provs[0];
+  const model = $('#bootModel');
+  if (model) {
+    if (!prov) {
+      model.textContent = '未配置';
+    } else if (prov.type === 'mock') {
+      model.textContent = 'demo · ' + (prov.model || 'mock');
+    } else {
+      model.textContent = prov.model || prov.name || '—';
+    }
+    model.title = prov ? prov.name + ' · ' + (prov.model || '未设模型') : '';
+  }
+  const tools = $('#bootTools');
+  if (tools) tools.textContent = state.tools ? String(state.tools.length) : '—';
+  const skills = $('#bootSkills');
+  if (skills) {
+    const all = state.skills || [];
+    skills.textContent = all.length ? all.filter((s) => s.enabled).length + ' / ' + all.length : '0';
+  }
 }
 
 function renderProviderSelect() {
@@ -250,6 +276,7 @@ function renderProviderSelect() {
     state.providerId = provs.length ? provs[0].id : null;
   }
   if (state.providerId) select.value = state.providerId;
+  paintEmpty();
 }
 
 function updateHeader() {
@@ -443,6 +470,18 @@ function messageEl(role, content) {  const wrap = document.createElement('div');
   return wrap;
 }
 
+/* 把输出切成带行号的行：每行两列，长行换行后仍对齐在文字列 */
+function numberLines(text, emptyText) {
+  const body = String(text == null ? '' : text).replace(/\s+$/, '');
+  if (!body) return '<div class="ln-empty">' + esc(emptyText || '（无输出）') + '</div>';
+  const pad = String(body.split('\n').length).length;
+  return body.split('\n').map((line, i) => {
+    const no = String(i + 1).padStart(pad, ' ');
+    const tx = esc(line);
+    return '<div class="ln"><span class="no">' + no + '</span><span class="tx">' + (tx || '&#8203;') + '</span></div>';
+  }).join('');
+}
+
 function toolCardEl(name, args, result) {
   const el = document.createElement('details');
   const okClass = result ? (result.ok === false ? ' err' : ' done') : ' running';
@@ -454,7 +493,9 @@ function toolCardEl(name, args, result) {
     '<span class="tool-state">' + status + '</span></summary>' +
     '<div class="tool-body">' +
     '<div class="tool-label">参数</div><pre class="args">' + esc(prettyJson(args)) + '</pre>' +
-    '<div class="tool-label">结果</div><pre class="out">' + esc(result ? result.content : '等待返回…') + '</pre>' +
+    '<div class="tool-label">结果</div><div class="out">' +
+    (result ? numberLines(result.content) : '<div class="ln-empty">等待返回…</div>') +
+    '</div>' +
     '</div>';
   return el;
 }
@@ -639,7 +680,7 @@ function handleEvent(event) {
         const act = card.querySelector('.tool-act');
         if (act) act.textContent = event.action;
       }
-      card.querySelector('.out').textContent = event.result || '';
+      card.querySelector('.out').innerHTML = numberLines(event.result || '');
       setAvatarState(live.el, '思考中', true);
       scrollBottom();
       break;
@@ -1350,6 +1391,7 @@ function bindStaticEvents() {
       }
       await loadConfig();
       updateHeader();
+      paintEmpty();
     } catch (err) { toast(err.message, 'error'); }
   };
 

@@ -6,6 +6,7 @@
   <title>ls agent</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%235eead4'/%3E%3Ctext x='16' y='21' font-family='Segoe UI,sans-serif' font-size='15' font-weight='700' text-anchor='middle' fill='%2304121a'%3Els%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/static/style.css" />
+<link rel="stylesheet" href="/static/style_v2.css">
 </head>
 <body>
   <div class="app">
@@ -50,13 +51,23 @@
 
       <section class="messages" id="messages">
         <div class="empty" id="emptyState">
-          <div class="empty-logo">ls</div>
-          <h2>开始一段对话</h2>
+          <div class="empty-head">
+            <div class="empty-logo">ls</div>
+            <div class="empty-titles">
+              <div class="empty-eyebrow"><i></i>LOCAL SESSION · READY</div>
+              <h2>开始一段对话</h2>
+            </div>
+          </div>
           <p>接入任意 OpenAI 兼容模型、Claude 或本地 Ollama；勾选技能即可扩展能力。</p>
+          <dl class="empty-meta">
+            <div><dt>MODEL</dt><dd id="bootModel">—</dd></div>
+            <div><dt>TOOLS</dt><dd id="bootTools">—</dd></div>
+            <div><dt>SKILLS</dt><dd id="bootSkills">—</dd></div>
+          </dl>
           <div class="chips">
-            <button class="chip" data-prompt="现在几点了？用工具查一下。">查时间（演示工具调用）</button>
-            <button class="chip" data-prompt="用 research-brief 技能，帮我做一份关于本地 AI Agent 的调研简报。">用技能做调研</button>
-            <button class="chip" data-prompt="在 workspace 里写一个 hello.py，然后运行它并把输出告诉我。">写代码并运行</button>
+            <button class="chip" data-prompt="现在几点了？用工具查一下。"><span class="chip-i">01</span><span class="chip-t">查时间</span><span class="chip-d">演示工具调用</span><span class="chip-go">→</span></button>
+            <button class="chip" data-prompt="用 research-brief 技能，帮我做一份关于本地 AI Agent 的调研简报。"><span class="chip-i">02</span><span class="chip-t">用技能做调研</span><span class="chip-d">research-brief</span><span class="chip-go">→</span></button>
+            <button class="chip" data-prompt="在 workspace 里写一个 hello.py，然后运行它并把输出告诉我。"><span class="chip-i">03</span><span class="chip-t">写代码并运行</span><span class="chip-d">run_python</span><span class="chip-go">→</span></button>
           </div>
         </div>
       </section>
